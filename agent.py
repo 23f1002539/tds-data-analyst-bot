@@ -107,6 +107,70 @@ def _extract_final(text):
         return None, raw
 
 
+def _extract_template(question):
+    """Find the JSON answer template the question asks for.
+
+    The spec format is {"answer": <template>, "log_url": "..."}. We scan for
+    balanced {...} substrings, and return <template> from the first object that
+    has an "answer" key. Returns None if no such object is found (then we leave
+    the answer untouched — never filter on a guessed template).
+    """
+    candidates = []
+    depth = 0
+    start = None
+    in_str = False
+    esc = False
+    for i, ch in enumerate(question):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                candidates.append(question[start:i + 1])
+                start = None
+    for c in candidates:
+        try:
+            o = json.loads(c)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(o, dict) and "answer" in o:
+            return o["answer"]
+    return None
+
+
+def _enforce_shape(answer, template):
+    """Filter `answer` to the keys/structure of `template` (best-effort, recursive).
+
+    Guarantees no extra keys leak into the graded answer (the grader
+    exact-matches). If template is None, returns answer unchanged.
+    """
+    if template is None or answer is None:
+        return answer
+    if isinstance(template, dict) and isinstance(answer, dict):
+        out = {}
+        for k, tv in template.items():
+            if k in answer:
+                out[k] = _enforce_shape(answer[k], tv)
+        return out
+    if isinstance(template, list) and isinstance(answer, list):
+        if template and isinstance(template[0], dict):
+            return [_enforce_shape(a, template[0]) for a in answer]
+        return answer
+    return answer
+
+
 def run_agent(question, history, *, model, api_key, base_url, on_step=None):
     """Run the agent. Returns dict {answer, raw, trace, error}.
 
@@ -131,7 +195,8 @@ def run_agent(question, history, *, model, api_key, base_url, on_step=None):
 
         ans, raw = _extract_final(resp)
         if ans is not None or raw:
-            return {"answer": ans, "raw": raw, "trace": trace, "error": None}
+            return {"answer": _enforce_shape(ans, _extract_template(question)),
+                    "raw": raw, "trace": trace, "error": None}
 
         blocks = _PYTHON_BLOCK.findall(resp)
         if blocks:
@@ -154,7 +219,8 @@ def run_agent(question, history, *, model, api_key, base_url, on_step=None):
         # No code and no final answer: maybe it blurted JSON directly
         stripped = resp.strip()
         try:
-            return {"answer": json.loads(stripped), "raw": stripped, "trace": trace, "error": None}
+            return {"answer": _enforce_shape(json.loads(stripped), _extract_template(question)),
+                    "raw": stripped, "trace": trace, "error": None}
         except json.JSONDecodeError:
             pass
         messages.append({"role": "assistant", "content": resp})
