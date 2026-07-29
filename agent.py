@@ -45,6 +45,17 @@ HOW TO FINISH:
     FINAL_ANSWER: "2023-04"
 - Output nothing after the FINAL_ANSWER line. No explanation, no prose.
 
+SHAPE FIDELITY (critical — answers are exact-matched):
+- Use EXACTLY the keys the question's JSON template shows — no more, no fewer.
+  Copy the key names and structure from the template the message provides.
+- NEVER add extra keys, even if informative. If the template is
+  {"state": "<state name>"} output {"state": "Assam"} — NOT
+  {"state": "Assam", "reduction": 58}. Extra keys fail grading.
+- Match value types: a string placeholder "<state name>" -> a string;
+  a number placeholder <number> -> a number; a list -> a list. Round numbers
+  only if the question asks for rounding.
+- If no template is given, return the minimal JSON that answers the question.
+
 Be rigorous. Verify the shape matches what the question asked before finishing."""
 
 MAX_ITER = 6
