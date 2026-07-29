@@ -1,0 +1,10 @@
+requests>=2.31
+python-dotenv>=1.0
+google-cloud-storage>=2.10
+pandas>=2.0
+numpy>=1.26
+openpyxl>=3.1
+beautifulsoup4>=4.12
+lxml>=5.0
+python-dateutil>=2.9
+tabulate>=0.9
